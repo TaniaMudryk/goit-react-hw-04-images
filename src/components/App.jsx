@@ -1,4 +1,4 @@
-import { Component } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Searchbar } from './Searchbar/Searchbar';
 import { ImageGallery } from './ImageGallery/ImageGallery';
 import { Button } from './Button/Button';
@@ -7,40 +7,35 @@ import { Loader } from './Loader/Loader';
 import { Modal } from './Modal/Modal';
 import { Notify } from 'notiflix/build/notiflix-notify-aio';
 
-export class App extends Component {
-  state = {
-    searchQuery: '',
-    page: 1,
-    totalHits: 0,
-    imageCards: [],
-    loading: false,
-    showModal: false,
-    selectedImgCard: undefined,
-  };
+export function App() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalHits, setTotalHits] = useState(0);
+  const [imageCards, setImageCards] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedImgCard, setSelectedImgCard] = useState(null);
 
-  componentDidUpdate(_, prevState) {
-    if (
-      this.state.searchQuery !== prevState.searchQuery ||
-      this.state.page !== prevState.page
-    ) {
-      const { searchQuery, page } = this.state;
-
-      this.setState({ loading: true, totalHits: 0 });
+  useEffect(() => {
+    if (searchQuery !== '' && page > 0) {
+      setLoading(true);
+      setTotalHits(0);
 
       const fetchResponse = FetchApi(searchQuery, page);
       fetchResponse
         .then(resp => {
           console.log(resp);
           if (resp.data.hits.length === 0) {
-            this.setState({ loading: false });
+            setLoading(false);
             Notify.warning('Oops! Find better)');
             return;
           }
 
-          this.setState(() => ({
-            imageCards: [...this.state.imageCards, ...resp.data.hits],
-            totalHits: resp.data.totalHits,
-          }));
+          setImageCards(prevImageCards => [
+            ...prevImageCards,
+            ...resp.data.hits,
+          ]);
+          setTotalHits(resp.data.totalHits);
 
           if (resp.data.total === 0) {
             Notify.warning(
@@ -51,59 +46,48 @@ export class App extends Component {
         .catch(error => {
           console.log(error);
           Notify.failure('Something went wrong...');
-          this.setState({ loading: false });
         })
-        .finally(() => this.setState({ loading: false }));
+        .finally(() => setLoading(false));
     }
-  }
+  }, [searchQuery, page]);
 
-  onSubmit = inputValue => {
-    if (this.state.searchQuery !== inputValue) {
-      this.setState({ searchQuery: inputValue, imageCards: [], page: 1 });
+  const onSubmit = inputValue => {
+    if (searchQuery !== inputValue) {
+      setSearchQuery(inputValue);
+      setImageCards([]);
+      setPage(1);
     }
   };
 
-  onLoadBtnClick = () => {
-    this.setState(({ page }) => ({
-      page: page + 1,
-    }));
+  const onLoadBtnClick = () => {
+    setPage(prevPage => prevPage + 1);
   };
 
-  toggleModal = () => {
-    this.setState(({ showModal }) => ({ showModal: !showModal }));
+  const toggleModal = () => {
+    setShowModal(prevShowModal => !prevShowModal);
   };
 
-  onImgClick = imgId => {
-    const imageCard = this.state.imageCards.find(
-      imageCard => imageCard.id === imgId
-    );
+  const onImgClick = imgId => {
+    const imageCard = imageCards.find(imageCard => imageCard.id === imgId);
 
-    this.setState({ selectedImgCard: imageCard, showModal: true });
+    setSelectedImgCard(imageCard);
+    setShowModal(true);
   };
+  return (
+    <div>
+      <Searchbar onSubmit={onSubmit} />
 
-  render() {
-    const { imageCards, loading, totalHits, showModal, selectedImgCard, page } =
-      this.state;
+      {imageCards.length > 0 && (
+        <ImageGallery imageCardsArray={imageCards} onImgClick={onImgClick} />
+      )}
 
-    return (
-      <div>
-        <Searchbar onSubmit={this.onSubmit} />
+      {showModal && (
+        <Modal onClose={toggleModal} selectedImgCard={selectedImgCard} />
+      )}
 
-        {imageCards.length > 0 && (
-          <ImageGallery
-            imageCardsArray={imageCards}
-            onImgClick={this.onImgClick}
-          />
-        )}
+      {loading && <Loader />}
 
-        {showModal && (
-          <Modal onClose={this.toggleModal} selectedImgCard={selectedImgCard} />
-        )}
-
-        {loading && <Loader />}
-
-        {page * 12 <= totalHits && <Button onClick={this.onLoadBtnClick} />}
-      </div>
-    );
-  }
+      {page * 12 <= totalHits && <Button onClick={onLoadBtnClick} />}
+    </div>
+  );
 }
